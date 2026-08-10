@@ -16,8 +16,7 @@ jobs:
 
       - name: Download project ZIP
         run: |
-          curl -L "https://github.com/merzakmarwan-jpg/Facture-simple/raw/main/FactureSimple_Source_Ready.zip" -o project.zip
-
+          curl -L "https://github.com/merzakmarwan-jpg/Facture-simple/raw/main/.github/workflows/FactureSimple_COMPLETE_v1.zip" -o project.zip
       - name: Extract project
         run: |
           rm -rf project
