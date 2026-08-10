@@ -14,30 +14,54 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download project ZIP
+      - name: Prepare project ZIP
         run: |
-          curl -L "https://github.com/merzakmarwan-jpg/Facture-simple/raw/main/.github/workflows/FactureSimple_COMPLETE_v1.zip" -o project.zip
-      - name: Extract project
-        run: |
+          set -e
+
+          ZIP_FILE=".github/workflows/FactureSimple_FIXED_JVM17_v2.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Project ZIP not found:"
+            echo "$ZIP_FILE"
+            echo ""
+            echo "Files in .github/workflows:"
+            ls -lah .github/workflows/
+            exit 1
+          fi
+
+          echo "ZIP found:"
+          ls -lh "$ZIP_FILE"
+
+          echo "Checking ZIP..."
+          unzip -t "$ZIP_FILE"
+
           rm -rf project
           mkdir project
-          unzip -q project.zip -d project
+
+          echo "Extracting project..."
+          unzip -q "$ZIP_FILE" -d project
 
           echo "===== PROJECT FILES ====="
-          find project -maxdepth 4 -type f | sort
+          find project -maxdepth 5 -type f | sort
 
       - name: Find Android project
         run: |
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/project" -name "settings.gradle.kts" -o -name "settings.gradle" | head -n 1 | xargs -r dirname)
+          set -e
+
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/project" \
+            \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
+            -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: settings.gradle.kts not found"
+            echo "ERROR: Android project not found."
             find "$GITHUB_WORKSPACE/project" -maxdepth 6 -type f | sort
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
+
+          echo "Android project found:"
+          echo "$PROJECT_DIR"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -57,13 +81,25 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Verify Java and Gradle
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          java -version
+          gradle --version
+
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          gradle assembleDebug --stacktrace
+          gradle clean assembleDebug --stacktrace
+
+      - name: Show APK
+        run: |
+          echo "===== APK FILES ====="
+          find "$PROJECT_DIR/app/build/outputs" -type f -name "*.apk" -ls
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FactureSimple-APK
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
