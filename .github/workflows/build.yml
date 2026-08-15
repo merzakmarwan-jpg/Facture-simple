@@ -1,103 +1,5 @@
-name: Build FactureSimple APK
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       # ==========================================
-      # 1. استخراج المشروع من ZIP
-      # ==========================================
-      - name: Prepare project ZIP
-        run: |
-          set -e
-
-          ZIP_FILE=".github/workflows/FactureSimple_FIXED_JVM17_v2.zip"
-
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found:"
-            echo "$ZIP_FILE"
-            echo ""
-            echo "Files in .github/workflows:"
-            ls -lah .github/workflows/
-            exit 1
-          fi
-
-          echo "ZIP found:"
-          ls -lh "$ZIP_FILE"
-
-          echo "Checking ZIP..."
-          unzip -t "$ZIP_FILE"
-
-          rm -rf project
-          mkdir project
-
-          echo "Extracting project..."
-          unzip -q "$ZIP_FILE" -d project
-
-          echo "===== PROJECT FILES ====="
-          find project -maxdepth 5 -type f | sort
-
-      # ==========================================
-      # 2. العثور على مشروع Android
-      # ==========================================
-      - name: Find Android project
-        run: |
-          set -e
-
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/project" \
-            \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
-            -print -quit | xargs -r dirname)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Android project not found."
-            find "$GITHUB_WORKSPACE/project" -maxdepth 6 -type f | sort
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Android project found:"
-          echo "$PROJECT_DIR"
-
-      # ==========================================
-      # 3. إعداد Java 17
-      # ==========================================
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      # ==========================================
-      # 4. إعداد Android SDK
-      # ==========================================
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
-      # ==========================================
-      # 5. إعداد Gradle
-      # ==========================================
-      - name: Install Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      # ==========================================
-      # 6. نشر Firebase Functions
+      # 7. نشر Firebase Functions
       # ==========================================
       - name: Deploy Firebase Functions
         working-directory: ${{ env.PROJECT_DIR }}
@@ -118,17 +20,31 @@ jobs:
           # إنشاء ملف Service Account مؤقت
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > firebase-service-account.json
 
-          # التحقق من أن JSON صالح
+          # التحقق من JSON
           node -e "JSON.parse(require('fs').readFileSync('firebase-service-account.json', 'utf8')); console.log('Firebase JSON is valid.')"
+
+          # استخدام Service Account
+          export GOOGLE_APPLICATION_CREDENTIALS="$PWD/firebase-service-account.json"
 
           # تثبيت Firebase CLI
           npm install -g firebase-tools
 
-          echo "Firebase CLI:"
+          echo "===== Node.js ====="
+          node --version
+
+          echo "===== Firebase CLI ====="
           firebase --version
 
-          # استخدام Service Account
-          export GOOGLE_APPLICATION_CREDENTIALS="$PWD/firebase-service-account.json"
+          echo "===== Firebase configuration ====="
+
+          if [ ! -f "firebase.json" ]; then
+            echo "ERROR: firebase.json not found."
+            echo "Searching:"
+            find "$PWD" -maxdepth 4 -name "firebase.json" -print
+            exit 1
+          fi
+
+          cat firebase.json
 
           echo "===== Deploying Firebase Functions ====="
 
@@ -136,45 +52,7 @@ jobs:
             --only functions \
             --project facturesimple-1b613
 
-          # حذف المفتاح بعد الانتهاء
+          # حذف المفتاح
           rm -f firebase-service-account.json
 
           echo "Firebase Functions deployment completed."
-
-      # ==========================================
-      # 7. التحقق من Java و Gradle
-      # ==========================================
-      - name: Verify Java and Gradle
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          java -version
-          gradle --version
-
-      # ==========================================
-      # 8. بناء APK
-      # ==========================================
-      - name: Build APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          gradle clean assembleDebug --stacktrace
-
-      # ==========================================
-      # 9. عرض APK
-      # ==========================================
-      - name: Show APK
-        run: |
-          echo "===== APK FILES ====="
-          find "$PROJECT_DIR/app/build/outputs" \
-            -type f \
-            -name "*.apk" \
-            -ls
-
-      # ==========================================
-      # 10. رفع APK
-      # ==========================================
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: FactureSimple-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
